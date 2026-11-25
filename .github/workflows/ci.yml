@@ -1,0 +1,54 @@
+name: Network automation CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: Lint and unit tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install pinned Python dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Ruff lint
+        run: python -m ruff check .
+      - name: Unit tests when present
+        shell: bash
+        run: |
+          if [[ -d tests/unit ]] && find tests/unit -name 'test_*.py' -print -quit | grep -q .; then
+            python -m pytest -q tests/unit
+          else
+            echo "No unit tests yet; pytest will run when tests are added."
+          fi
+
+  lab:
+    name: Containerlab integration
+    runs-on: ubuntu-24.04
+    needs: python
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Containerlab 0.83.0
+        run: |
+          curl -fsSL -o /tmp/containerlab.deb \
+            https://github.com/srl-labs/containerlab/releases/download/v0.83.0/containerlab_0.83.0_linux_amd64.deb
+          sudo apt-get install -y /tmp/containerlab.deb
+      - name: Deploy isolated lab
+        run: sudo containerlab deploy -t lab/topology.clab.yml
+      - name: Check VLAN connectivity
+        run: sudo bash scripts/ci_lab_check.sh
+      - name: Clean up lab
+        if: always()
+        run: |
+          if sudo containerlab inspect -t lab/topology.clab.yml >/dev/null 2>&1; then
+            sudo containerlab destroy -t lab/topology.clab.yml --cleanup
+          fi

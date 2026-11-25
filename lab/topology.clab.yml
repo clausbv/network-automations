@@ -1,0 +1,46 @@
+name: initial-check
+prefix: ""
+
+topology:
+  nodes:
+    dut1:
+      kind: linux
+      image: alpine:latest
+      exec:
+        - apk add --no-cache iproute2
+        - ip link add link eth1 name eth1.10 type vlan id 10
+        - ip link add link eth1 name eth1.20 type vlan id 20
+        - ip addr add 10.10.10.1/24 dev eth1.10
+        - ip addr add 10.10.20.1/24 dev eth1.20
+        - ip link set eth1.10 up
+        - ip link set eth1.20 up
+    dut2:
+      kind: linux
+      image: alpine:latest
+      exec:
+        - apk add --no-cache iproute2
+        - ip link add link eth1 name eth1.10 type vlan id 10
+        - ip link add link eth1 name eth1.20 type vlan id 20
+        - ip addr add 10.10.10.2/24 dev eth1.10
+        - ip addr add 10.10.20.2/24 dev eth1.20
+        - ip link set eth1.10 up
+        - ip link set eth1.20 up
+    sw1:
+      kind: linux
+      image: alpine:latest
+      exec:
+        - apk add --no-cache iproute2
+        - ip link set br0 type bridge vlan_filtering 1
+        - bridge vlan del dev dut1eth1 vid 1
+        - bridge vlan del dev dut2eth1 vid 1
+        - bridge vlan add dev dut1eth1 vid 10
+        - bridge vlan add dev dut1eth1 vid 20
+        - bridge vlan add dev dut2eth1 vid 10
+        - bridge vlan add dev dut2eth1 vid 20
+    "br0|sw1":
+      kind: bridge
+      network-mode: container:sw1
+      startup-delay: 8
+  links:
+    - endpoints: ["dut1:eth1", "br0|sw1:dut1eth1"]
+    - endpoints: ["dut2:eth1", "br0|sw1:dut2eth1"]
